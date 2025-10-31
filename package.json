@@ -1,5 +1,6 @@
 {
   "name": "erpnext",
+  "version": "1.0.0",
   "description": "Open Source ERP System powered by the Frappe Framework",
   "repository": {
     "type": "git",
