@@ -79,12 +79,18 @@ git push origin main
 # Kod değiştir
 git add .
 git commit -m "New feature"
-git push origin main  # ← OTOMATIK DEPLOY!
+git push origin master  # ← OTOMATIK DEPLOY + VERSİYON ARTISI!
 ```
+
+**Otomatik Versiyonlama:**
+- Her `git push` → Versiyon otomatik artar (1.0.0 → 1.0.1 → 1.0.2...)
+- GitHub Actions otomatik versiyon commit'i yapar
+- [skip ci] etiketi ile sonsuz döngü önlenir
 
 **Deployment takibi:**
 - GitHub → **Actions** sekmesi
 - Her adımı canlı takip
+- Version history görüntüle
 
 ## 📁 Proje Yapısı
 
