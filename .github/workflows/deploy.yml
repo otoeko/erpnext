@@ -1,0 +1,87 @@
+name: Deploy ERPNext to Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  SERVER_HOST: ${{ secrets.SERVER_HOST }}
+  SERVER_USER: ${{ secrets.SERVER_USER }}
+  SSH_KEY: ${{ secrets.SSH_KEY }}
+  APP_PATH: /opt/erpnext
+
+jobs:
+  deploy:
+    name: Deploy to Production Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H $SERVER_HOST >> ~/.ssh/known_hosts
+
+      - name: Deploy application
+        run: |
+          # Copy deployment files
+          scp -r deployment/ $SERVER_USER@$SERVER_HOST:$APP_PATH/
+          scp -r erpnext/ $SERVER_USER@$SERVER_HOST:$APP_PATH/apps/
+
+          # Deploy on server
+          ssh $SERVER_USER@$SERVER_HOST << 'EOF'
+            cd ${{ env.APP_PATH }}
+
+            echo "🚀 Starting deployment..."
+
+            # Stop existing containers
+            docker-compose -f deployment/docker-compose.prod.yml down || true
+
+            # Pull latest images
+            docker-compose -f deployment/docker-compose.prod.yml pull
+
+            # Start services
+            docker-compose -f deployment/docker-compose.prod.yml up -d
+
+            # Wait for services to be ready
+            echo "⏳ Waiting for services to start..."
+            sleep 45
+
+            # Run migrations
+            docker-compose -f deployment/docker-compose.prod.yml exec -T erpnext-python bench --site all migrate || true
+
+            # Clear cache
+            docker-compose -f deployment/docker-compose.prod.yml exec -T erpnext-python bench --site all clear-cache || true
+
+            echo "✅ Deployment completed successfully!"
+          EOF
+
+      - name: Health check
+        run: |
+          ssh $SERVER_USER@$SERVER_HOST << 'EOF'
+            cd ${{ env.APP_PATH }}
+
+            # Check if containers are running
+            if docker-compose -f deployment/docker-compose.prod.yml ps | grep -q "Up"; then
+              echo "✅ All services are running successfully"
+            else
+              echo "❌ Some services are not running properly"
+              docker-compose -f deployment/docker-compose.prod.yml logs --tail=20
+              exit 1
+            fi
+          EOF
+
+      - name: Deployment notification
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "🎉 ERPNext deployment successful!"
+          else
+            echo "❌ ERPNext deployment failed!"
+          fi

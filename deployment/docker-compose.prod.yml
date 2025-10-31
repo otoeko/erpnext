@@ -1,0 +1,214 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: erpnext_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+    depends_on:
+      - erpnext-python
+      - erpnext-nodejs
+    networks:
+      - erpnext-network
+
+  erpnext-python:
+    image: frappe/erpnext-worker:latest
+    container_name: erpnext_backend
+    restart: unless-stopped
+    environment:
+      - DB_HOST=mariadb
+      - DB_PORT=3306
+      - REDIS_CACHE=redis-cache:6379
+      - REDIS_QUEUE=redis-queue:6379
+      - REDIS_SOCKETIO=redis-socketio:6379
+      - SOCKETIO_PORT=9000
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps/erpnext:/home/frappe/frappe-bench/apps/erpnext
+    depends_on:
+      - mariadb
+      - redis-cache
+      - redis-queue
+      - redis-socketio
+    networks:
+      - erpnext-network
+
+  erpnext-nodejs:
+    image: frappe/erpnext-nodejs:latest
+    container_name: erpnext_frontend
+    restart: unless-stopped
+    environment:
+      - FRAPPE_PY=erpnext-python
+      - FRAPPE_PY_PORT=8000
+      - FRAPPE_SOCKETIO=erpnext-socketio
+      - SOCKETIO_PORT=9000
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+    depends_on:
+      - erpnext-python
+    networks:
+      - erpnext-network
+
+  erpnext-socketio:
+    image: frappe/frappe-socketio:latest
+    container_name: erpnext_socketio
+    restart: unless-stopped
+    environment:
+      - REDIS_SERVER=redis-socketio:6379
+    depends_on:
+      - redis-socketio
+    networks:
+      - erpnext-network
+
+  erpnext-scheduler:
+    image: frappe/erpnext-worker:latest
+    container_name: erpnext_scheduler
+    restart: unless-stopped
+    command: bench schedule
+    environment:
+      - DB_HOST=mariadb
+      - DB_PORT=3306
+      - REDIS_CACHE=redis-cache:6379
+      - REDIS_QUEUE=redis-queue:6379
+      - REDIS_SOCKETIO=redis-socketio:6379
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps/erpnext:/home/frappe/frappe-bench/apps/erpnext
+    depends_on:
+      - mariadb
+      - redis-cache
+      - redis-queue
+    networks:
+      - erpnext-network
+
+  erpnext-worker-default:
+    image: frappe/erpnext-worker:latest
+    container_name: erpnext_worker_default
+    restart: unless-stopped
+    command: bench worker --queue default
+    environment:
+      - DB_HOST=mariadb
+      - DB_PORT=3306
+      - REDIS_CACHE=redis-cache:6379
+      - REDIS_QUEUE=redis-queue:6379
+      - REDIS_SOCKETIO=redis-socketio:6379
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps/erpnext:/home/frappe/frappe-bench/apps/erpnext
+    depends_on:
+      - mariadb
+      - redis-cache
+      - redis-queue
+    networks:
+      - erpnext-network
+
+  erpnext-worker-short:
+    image: frappe/erpnext-worker:latest
+    container_name: erpnext_worker_short
+    restart: unless-stopped
+    command: bench worker --queue short
+    environment:
+      - DB_HOST=mariadb
+      - DB_PORT=3306
+      - REDIS_CACHE=redis-cache:6379
+      - REDIS_QUEUE=redis-queue:6379
+      - REDIS_SOCKETIO=redis-socketio:6379
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps/erpnext:/home/frappe/frappe-bench/apps/erpnext
+    depends_on:
+      - mariadb
+      - redis-cache
+      - redis-queue
+    networks:
+      - erpnext-network
+
+  erpnext-worker-long:
+    image: frappe/erpnext-worker:latest
+    container_name: erpnext_worker_long
+    restart: unless-stopped
+    command: bench worker --queue long
+    environment:
+      - DB_HOST=mariadb
+      - DB_PORT=3306
+      - REDIS_CACHE=redis-cache:6379
+      - REDIS_QUEUE=redis-queue:6379
+      - REDIS_SOCKETIO=redis-socketio:6379
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - assets:/home/frappe/frappe-bench/sites/assets
+      - ./apps/erpnext:/home/frappe/frappe-bench/apps/erpnext
+    depends_on:
+      - mariadb
+      - redis-cache
+      - redis-queue
+    networks:
+      - erpnext-network
+
+  mariadb:
+    image: mariadb:10.6
+    container_name: erpnext_mariadb
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=123
+      - MYSQL_USER=frappe
+      - MYSQL_PASSWORD=frappe
+    volumes:
+      - mariadb-data:/var/lib/mysql
+      - ./mariadb/conf.d:/etc/mysql/conf.d
+    ports:
+      - "3306:3306"
+    networks:
+      - erpnext-network
+
+  redis-cache:
+    image: redis:6.2-alpine
+    container_name: erpnext_redis_cache
+    restart: unless-stopped
+    volumes:
+      - redis-cache-data:/data
+    networks:
+      - erpnext-network
+
+  redis-queue:
+    image: redis:6.2-alpine
+    container_name: erpnext_redis_queue
+    restart: unless-stopped
+    volumes:
+      - redis-queue-data:/data
+    networks:
+      - erpnext-network
+
+  redis-socketio:
+    image: redis:6.2-alpine
+    container_name: erpnext_redis_socketio
+    restart: unless-stopped
+    volumes:
+      - redis-socketio-data:/data
+    networks:
+      - erpnext-network
+
+volumes:
+  mariadb-data:
+  redis-cache-data:
+  redis-queue-data:
+  redis-socketio-data:
+  sites:
+  assets:
+
+networks:
+  erpnext-network:
+    driver: bridge
